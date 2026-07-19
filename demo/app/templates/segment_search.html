@@ -1,0 +1,61 @@
+{% extends "base.html" %}
+{% block content %}
+<h1>実験条件の検索</h1>
+
+<form hx-get="/segments/search/results" hx-target="#search-results" hx-trigger="change, submit">
+  <fieldset>
+    <legend>絞り込み条件(複数指定するとAND条件になります)</legend>
+
+    {% for w in widgets %}
+      {% if w.key_name == "posture" %}
+        <label for="s_posture">{{ w.display_name }}</label>
+        <select id="s_posture" name="posture">
+          <option value="">(指定なし)</option>
+          {% for v in w.choices %}
+            <option value="{{ v.value }}">{{ v.display_name }}</option>
+          {% endfor %}
+        </select>
+
+      {% elif w.key_name == "subjects" %}
+        <label for="s_subjects">{{ w.display_name }}(含む実験を検索)</label>
+        <select id="s_subjects" name="subjects">
+          <option value="">(指定なし)</option>
+          {% for v in w.choices %}
+            <option value="{{ v.value }}">{{ v.display_name }}</option>
+          {% endfor %}
+        </select>
+
+      {% elif w.value_type == "number" %}
+        <label>{{ w.display_name }}(範囲)</label>
+        <input type="number" step="any" name="{{ w.key_name }}_min" placeholder="下限"
+               {% if w.min_value is not none %}min="{{ w.min_value }}"{% endif %}
+               {% if w.max_value is not none %}max="{{ w.max_value }}"{% endif %}
+               style="width: 6rem;">
+        〜
+        <input type="number" step="any" name="{{ w.key_name }}_max" placeholder="上限"
+               {% if w.min_value is not none %}min="{{ w.min_value }}"{% endif %}
+               {% if w.max_value is not none %}max="{{ w.max_value }}"{% endif %}
+               style="width: 6rem;">
+
+      {% elif w.value_type == "boolean" %}
+        <label for="s_{{ w.key_name }}">{{ w.display_name }}</label>
+        <select id="s_{{ w.key_name }}" name="{{ w.key_name }}">
+          <option value="">(指定なし)</option>
+          <option value="true">はい</option>
+          <option value="false">いいえ</option>
+        </select>
+
+      {% else %}
+        <label for="s_{{ w.key_name }}">{{ w.display_name }}(部分一致)</label>
+        <input type="text" id="s_{{ w.key_name }}" name="{{ w.key_name }}">
+      {% endif %}
+    {% endfor %}
+  </fieldset>
+
+  <button type="submit">検索</button>
+</form>
+
+<div id="search-results">
+  {% include "_segments_table.html" %}
+</div>
+{% endblock %}

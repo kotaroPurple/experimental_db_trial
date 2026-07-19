@@ -1,0 +1,78 @@
+{% extends "base.html" %}
+{% block content %}
+<h1>実験条件の登録</h1>
+
+<form hx-post="/segments" hx-target="#register-result" hx-swap="innerHTML">
+  <fieldset>
+    <legend>基本情報</legend>
+    <label for="label">ラベル(任意)</label>
+    <input type="text" id="label" name="label" placeholder="例: デモ実験4">
+
+    <label for="record_date">計測日 *</label>
+    <input type="date" id="record_date" name="record_date" required>
+
+    <label for="started_at">開始時刻(任意)</label>
+    <input type="datetime-local" id="started_at" name="started_at">
+
+    <label for="ended_at">終了時刻(任意)</label>
+    <input type="datetime-local" id="ended_at" name="ended_at">
+
+    <label for="creator_id">担当者 *</label>
+    <input type="text" id="creator_id" name="creator_id" required>
+  </fieldset>
+
+  <fieldset>
+    <legend>実験条件(マスタ統制・未入力の項目は記録されません)</legend>
+
+    {% for w in widgets %}
+      {% if w.key_name == "posture" %}
+        <label for="posture">{{ w.display_name }}</label>
+        <select id="posture" name="posture">
+          <option value="">(未選択)</option>
+          {% for v in w.choices %}
+            <option value="{{ v.value }}">{{ v.display_name }}</option>
+          {% endfor %}
+        </select>
+
+      {% elif w.key_name == "subjects" %}
+        <label for="subjects">{{ w.display_name }}</label>
+        <select id="subjects" name="subjects" multiple size="3">
+          {% for v in w.choices %}
+            <option value="{{ v.value }}">{{ v.display_name }}</option>
+          {% endfor %}
+        </select>
+        <label style="display:inline-block; margin-top:0.3rem;">
+          <input type="checkbox" name="subjects_none">
+          被験者0人として明示的に記録する(未選択のまま送信すると「未記入」扱いになります)
+        </label>
+
+      {% elif w.value_type == "number" %}
+        <label for="{{ w.key_name }}">{{ w.display_name }}
+          {% if w.min_value is not none or w.max_value is not none %}
+            <span class="hint">({{ w.min_value }}〜{{ w.max_value }})</span>
+          {% endif %}
+        </label>
+        <input type="number" step="any" id="{{ w.key_name }}" name="{{ w.key_name }}"
+               {% if w.min_value is not none %}min="{{ w.min_value }}"{% endif %}
+               {% if w.max_value is not none %}max="{{ w.max_value }}"{% endif %}>
+
+      {% elif w.value_type == "boolean" %}
+        <label for="{{ w.key_name }}">{{ w.display_name }}</label>
+        <select id="{{ w.key_name }}" name="{{ w.key_name }}">
+          <option value="">(未記入)</option>
+          <option value="true">はい</option>
+          <option value="false">いいえ</option>
+        </select>
+
+      {% else %}
+        <label for="{{ w.key_name }}">{{ w.display_name }}</label>
+        <input type="text" id="{{ w.key_name }}" name="{{ w.key_name }}">
+      {% endif %}
+    {% endfor %}
+  </fieldset>
+
+  <button type="submit">登録</button>
+</form>
+
+<div id="register-result"></div>
+{% endblock %}

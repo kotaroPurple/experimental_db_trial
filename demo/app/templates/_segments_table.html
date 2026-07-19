@@ -1,0 +1,36 @@
+{% if segments %}
+<table>
+  <thead>
+    <tr>
+      <th>ID</th>
+      <th>ラベル</th>
+      <th>計測日</th>
+      <th>時間帯</th>
+      <th>実験条件</th>
+      <th>担当者</th>
+      <th>登録日時</th>
+    </tr>
+  </thead>
+  <tbody>
+    {% for seg in segments %}
+    <tr>
+      <td>{{ seg.segment_id }}</td>
+      <td>{{ seg.label or "" }}</td>
+      <td>{{ seg.record_date }}</td>
+      <td>{{ seg.started_at or "" }}{% if seg.ended_at %} 〜 {{ seg.ended_at }}{% endif %}</td>
+      <td>
+        {% for name, value in seg.condition_display %}
+          <span class="cond-tag">{{ name }}: {{ value }}</span>
+        {% else %}
+          <span class="hint">(条件なし)</span>
+        {% endfor %}
+      </td>
+      <td>{{ seg.creator_id }}</td>
+      <td>{{ seg.created_at }}</td>
+    </tr>
+    {% endfor %}
+  </tbody>
+</table>
+{% else %}
+<p class="hint">該当するデータがありません。</p>
+{% endif %}

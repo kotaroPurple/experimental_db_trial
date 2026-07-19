@@ -12,3 +12,6 @@ wheels/
 
 # Virtual environments
 .venv
+
+# demo (SQLite + FastAPI local demo) runtime DB
+demo/data/*.db
