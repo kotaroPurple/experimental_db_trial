@@ -36,6 +36,10 @@ def _condition_widgets(conn: sqlite3.Connection) -> list[dict]:
             widget["choices"] = repository.list_condition_values_for_key(conn, key["key_id"])
         else:
             widget["choices"] = []
+        if key["value_type"] == "number_array":
+            widget["axes"] = repository.list_axes_for_key(conn, key["key_id"])
+        else:
+            widget["axes"] = []
         widgets.append(widget)
     return widgets
 
@@ -83,6 +87,8 @@ def segment_create(
     room_temperature: Annotated[str, Form()] = "",
     is_night: Annotated[str, Form()] = "",
     notes_free: Annotated[str, Form()] = "",
+    position_x: Annotated[str, Form()] = "",
+    position_y: Annotated[str, Form()] = "",
 ):
     conditions: dict = {}
     if posture:
@@ -98,20 +104,30 @@ def segment_create(
     if notes_free.strip():
         conditions["notes_free"] = notes_free.strip()
 
+    # position(number_array)は1つの値としてx,yを両方揃える必要がある(DD-19)。
+    # 片方だけの入力は不完全な位置情報になるため、ここでUX向けのエラーとして弾く。
+    # validate_conditions()の配列長チェックが、これをバイパスした場合の最終防衛線になる。
+    position_filled = [bool(position_x.strip()), bool(position_y.strip())]
     error = None
     segment_id = None
-    try:
-        segment_id = repository.create_segment(
-            conn,
-            label=label or None,
-            record_date=record_date,
-            started_at=started_at or None,
-            ended_at=ended_at or None,
-            conditions=conditions,
-            creator_id=creator_id,
-        )
-    except repository.ConditionValidationError as exc:
-        error = str(exc)
+    if any(position_filled) and not all(position_filled):
+        error = "位置(x, y)は両方入力するか、両方空欄にしてください。"
+    else:
+        if all(position_filled):
+            conditions["position"] = [float(position_x), float(position_y)]
+
+        try:
+            segment_id = repository.create_segment(
+                conn,
+                label=label or None,
+                record_date=record_date,
+                started_at=started_at or None,
+                ended_at=ended_at or None,
+                conditions=conditions,
+                creator_id=creator_id,
+            )
+        except repository.ConditionValidationError as exc:
+            error = str(exc)
 
     return templates.TemplateResponse(
         request,
@@ -144,6 +160,10 @@ def segment_search_results(
     room_temperature_max: str = "",
     is_night: str = "",
     notes_free: str = "",
+    position_x_min: str = "",
+    position_x_max: str = "",
+    position_y_min: str = "",
+    position_y_max: str = "",
 ):
     filters: dict = {}
     if posture:
@@ -158,6 +178,14 @@ def segment_search_results(
         filters["is_night"] = is_night == "true"
     if notes_free.strip():
         filters["notes_free"] = notes_free.strip()
+    if position_x_min.strip():
+        filters["position_x_min"] = float(position_x_min)
+    if position_x_max.strip():
+        filters["position_x_max"] = float(position_x_max)
+    if position_y_min.strip():
+        filters["position_y_min"] = float(position_y_min)
+    if position_y_max.strip():
+        filters["position_y_max"] = float(position_y_max)
 
     segments = repository.search_segments(conn, filters)
     return templates.TemplateResponse(

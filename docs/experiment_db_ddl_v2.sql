@@ -12,7 +12,7 @@ CREATE TABLE condition_keys (
     key_id       bigint GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
     key_name     text NOT NULL UNIQUE,
     display_name text NOT NULL,
-    value_type   text NOT NULL CHECK (value_type IN ('enum','enum_array','number','text','boolean')),
+    value_type   text NOT NULL CHECK (value_type IN ('enum','enum_array','number','number_array','text','boolean')),
     scope        text NOT NULL DEFAULT 'segment'
                  CHECK (scope IN ('session','segment','both')),
                  -- session: 計測セットアップ用 / segment: 実験条件用
@@ -30,6 +30,20 @@ CREATE TABLE condition_values (
     is_active    boolean NOT NULL DEFAULT true,
     merged_into  bigint REFERENCES condition_values(value_id),
     UNIQUE (key_id, value)
+);
+
+-- value_type='number_array' の軸定義(軸数・ラベル・軸ごとの範囲、DD-19)。
+-- condition_values と異なり列挙ではなく連続値の型パラメータを持つため、is_active/merged_into は設けない。
+-- axis_label はアプリ側でフォームのフィールド名にも使う識別子のため、短いASCII文字列を想定する。
+CREATE TABLE condition_key_axes (
+    axis_id    bigint GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
+    key_id     bigint NOT NULL REFERENCES condition_keys(key_id),
+    axis_index int NOT NULL CHECK (axis_index >= 0),   -- 0始まり。配列内の位置と一致
+    axis_label text NOT NULL,                          -- 例 'x'
+    min_value  numeric,   -- 軸ごとの下限 (NULL=制限なし)
+    max_value  numeric,   -- 軸ごとの上限 (NULL=制限なし)
+    UNIQUE (key_id, axis_index),
+    UNIQUE (key_id, axis_label)
 );
 
 -- ============================================================
@@ -240,9 +254,11 @@ CREATE TRIGGER trg_segment_within_session
 CREATE OR REPLACE FUNCTION validate_jsonb_against_master(cond jsonb, target_scope text)
 RETURNS void AS $$
 DECLARE
-    k      text;
-    v      jsonb;          -- 型を保ったまま扱う (jsonb_each_text は使わない)
-    ck_row condition_keys%ROWTYPE;
+    k          text;
+    v          jsonb;          -- 型を保ったまま扱う (jsonb_each_text は使わない)
+    ck_row     condition_keys%ROWTYPE;
+    axis_row   record;
+    axis_count int;
 BEGIN
     FOR k, v IN SELECT key, value FROM jsonb_each(cond)
     LOOP
@@ -289,6 +305,42 @@ BEGIN
             IF ck_row.max_value IS NOT NULL AND (v)::numeric > ck_row.max_value THEN
                 RAISE EXCEPTION 'キー % の値 % は上限 % 超過です', k, v, ck_row.max_value;
             END IF;
+
+        WHEN 'number_array' THEN
+            -- 多次元の数値条件 (例: position=[2.5, 1.0])。軸ごとの定義は condition_key_axes (DD-19)。
+            IF jsonb_typeof(v) <> 'array' THEN
+                RAISE EXCEPTION 'キー % は配列である必要があります: %', k, v;
+            END IF;
+
+            SELECT count(*) INTO axis_count
+            FROM condition_key_axes WHERE key_id = ck_row.key_id;
+
+            IF jsonb_array_length(v) <> axis_count THEN
+                RAISE EXCEPTION 'キー % の配列長(%)は登録軸数(%)と一致しません: %',
+                    k, jsonb_array_length(v), axis_count, v;
+            END IF;
+
+            FOR axis_row IN
+                SELECT axis_index, axis_label, min_value, max_value
+                FROM condition_key_axes
+                WHERE key_id = ck_row.key_id
+                ORDER BY axis_index
+            LOOP
+                IF jsonb_typeof(v -> axis_row.axis_index) <> 'number' THEN
+                    RAISE EXCEPTION 'キー % の軸 %(位置%)は数値である必要があります: %',
+                        k, axis_row.axis_label, axis_row.axis_index, v -> axis_row.axis_index;
+                END IF;
+                IF axis_row.min_value IS NOT NULL
+                   AND (v -> axis_row.axis_index)::numeric < axis_row.min_value THEN
+                    RAISE EXCEPTION 'キー % の軸 % の値 % は下限 % 未満です',
+                        k, axis_row.axis_label, v -> axis_row.axis_index, axis_row.min_value;
+                END IF;
+                IF axis_row.max_value IS NOT NULL
+                   AND (v -> axis_row.axis_index)::numeric > axis_row.max_value THEN
+                    RAISE EXCEPTION 'キー % の軸 % の値 % は上限 % 超過です',
+                        k, axis_row.axis_label, v -> axis_row.axis_index, axis_row.max_value;
+                END IF;
+            END LOOP;
 
         WHEN 'boolean' THEN
             IF jsonb_typeof(v) <> 'boolean' THEN

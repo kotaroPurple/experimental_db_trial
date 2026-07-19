@@ -46,6 +46,19 @@
           被験者0人として明示的に記録する(未選択のまま送信すると「未記入」扱いになります)
         </label>
 
+      {% elif w.key_name == "position" %}
+        <label>{{ w.display_name }}(x, yの両方を入力するか、両方空欄にしてください)</label>
+        {% for axis in w.axes %}
+          <label for="position_{{ axis.axis_label }}">{{ axis.axis_label }}
+            {% if axis.min_value is not none or axis.max_value is not none %}
+              <span class="hint">({{ axis.min_value }}〜{{ axis.max_value }})</span>
+            {% endif %}
+          </label>
+          <input type="number" step="any" id="position_{{ axis.axis_label }}" name="position_{{ axis.axis_label }}"
+                 {% if axis.min_value is not none %}min="{{ axis.min_value }}"{% endif %}
+                 {% if axis.max_value is not none %}max="{{ axis.max_value }}"{% endif %}>
+        {% endfor %}
+
       {% elif w.value_type == "number" %}
         <label for="{{ w.key_name }}">{{ w.display_name }}
           {% if w.min_value is not none or w.max_value is not none %}

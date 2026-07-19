@@ -25,6 +25,15 @@
           {% endfor %}
         </select>
 
+      {% elif w.key_name == "position" %}
+        <label>{{ w.display_name }}(軸ごとの範囲、任意)</label>
+        {% for axis in w.axes %}
+          {{ axis.axis_label }}:
+          <input type="number" step="any" name="position_{{ axis.axis_label }}_min" placeholder="下限" style="width: 5rem;">
+          〜
+          <input type="number" step="any" name="position_{{ axis.axis_label }}_max" placeholder="上限" style="width: 5rem;">
+        {% endfor %}
+
       {% elif w.value_type == "number" %}
         <label>{{ w.display_name }}(範囲)</label>
         <input type="number" step="any" name="{{ w.key_name }}_min" placeholder="下限"

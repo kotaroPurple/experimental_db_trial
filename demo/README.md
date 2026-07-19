@@ -7,6 +7,9 @@
 
 ## 本設計との違い
 
+- 例外: `condition_keys.value_type='number_array'`(被験者位置の例)と `condition_key_axes` は、他の項目と
+  異なり**本設計(`docs/`)とスキーマを1:1で一致させている**(DD-19)。デモ用の簡略化ではなく、本番の
+  多次元条件の扱いをそのまま実演するためのもの。
 - `recording_sessions` / `raw_files` / `formatted_data` / `algorithm_runs` は作らない。`segments` 相当の
   フラットな1テーブルのみ(`session_id` FKなし、DD-11のセッション範囲内チェックも省略)。
 - `jsonb` の代わりに `TEXT` にJSON文字列を保存する(`demo/app/schema.sql`)。
@@ -36,3 +39,4 @@ DBファイルは `demo/data/demo.db`(gitignore対象)。作り直したい場�
 - `/segments` — 閲覧: 登録済みの実験条件を一覧表示(条件はマスタの表示名で表示、生JSONは出さない)
 - `/segments/new` — 登録: マスタで統制された条件キー・選択肢からフォームを組み立てて登録
 - `/segments/search` — 検索: 条件キーで絞り込み(複数指定でAND)。htmxでページ遷移なしに結果を更新
+  (position は軸(x,y)ごとに独立した範囲指定が可能)

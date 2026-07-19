@@ -61,7 +61,7 @@ erDiagram
         bigint key_id PK
         text key_name UK "例 posture"
         text display_name "例 姿勢"
-        text value_type "enum/number/text/boolean"
+        text value_type "enum/enum_array/number/number_array/text/boolean"
         text scope "session/segment/both"
         text description
         boolean is_active
@@ -76,6 +76,15 @@ erDiagram
         bigint merged_into "統合先value_id NULL可"
     }
 
+    condition_key_axes {
+        bigint axis_id PK
+        bigint key_id FK
+        int axis_index "0始まり、配列内の位置"
+        text axis_label "例 x (フォームのフィールド名にも使う識別子)"
+        numeric min_value "軸ごとの下限 NULL可"
+        numeric max_value "軸ごとの上限 NULL可"
+    }
+
     recording_sessions ||--|{ raw_files : "計測1回にセンサーxファイルのN個(N>=1)"
     recording_sessions ||--o{ segments : "切り出しは0個以上"
     segments ||--o{ formatted_data : "区間xセンサーで整形(0個以上)"
@@ -83,5 +92,6 @@ erDiagram
     algorithm_runs ||--|{ run_inputs : "入力の組"
     formatted_data ||--o{ run_inputs : "複数runの入力になりうる"
     condition_keys ||--o{ condition_values : "enum型キーの選択肢"
+    condition_keys ||--o{ condition_key_axes : "number_array型キーの軸定義"
     condition_values |o--o| condition_values : "統合(merged_into)"
 ```

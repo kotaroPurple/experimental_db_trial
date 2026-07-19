@@ -49,6 +49,15 @@ def seed(conn):
                 (row["key_id"], json.dumps(raw_value, ensure_ascii=False), display_name),
             )
 
+        for axis_index, (axis_label, min_v, max_v) in enumerate(key.get("axes", [])):
+            conn.execute(
+                """
+                INSERT OR IGNORE INTO condition_key_axes (key_id, axis_index, axis_label, min_value, max_value)
+                VALUES (?, ?, ?, ?, ?)
+                """,
+                (row["key_id"], axis_index, axis_label, min_v, max_v),
+            )
+
     existing = conn.execute("SELECT COUNT(*) AS n FROM segments").fetchone()["n"]
     if existing == 0:
         for seg in SAMPLE_SEGMENTS:
@@ -72,6 +81,7 @@ def seed(conn):
     counts = {
         "condition_keys": conn.execute("SELECT COUNT(*) AS n FROM condition_keys").fetchone()["n"],
         "condition_values": conn.execute("SELECT COUNT(*) AS n FROM condition_values").fetchone()["n"],
+        "condition_key_axes": conn.execute("SELECT COUNT(*) AS n FROM condition_key_axes").fetchone()["n"],
         "segments": conn.execute("SELECT COUNT(*) AS n FROM segments").fetchone()["n"],
     }
     return counts
@@ -96,7 +106,7 @@ def main():
 
     print(f"DB: {db.DB_PATH}")
     print(f"condition_keys={counts['condition_keys']} condition_values={counts['condition_values']} "
-          f"segments={counts['segments']}")
+          f"condition_key_axes={counts['condition_key_axes']} segments={counts['segments']}")
 
 
 if __name__ == "__main__":
