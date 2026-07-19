@@ -1,7 +1,7 @@
 
 # シーケンス図
 
-## 1.
+## 1. recording
 
 ```mermaid
 sequenceDiagram
@@ -38,7 +38,7 @@ sequenceDiagram
 
 ```
 
-## 2.
+## 2. segment format
 
 ```mermaid
 sequenceDiagram
@@ -77,7 +77,7 @@ sequenceDiagram
     T-->>A: 整形完了 (未整形のセンサーも一覧表示)
 ```
 
-## 3.
+## 3. run algorithm
 
 ```mermaid
 sequenceDiagram
@@ -118,7 +118,7 @@ sequenceDiagram
     T-->>U: run_id・出力URIを表示
 ```
 
-## 4.
+## 4. master management
 
 ```mermaid
 sequenceDiagram
