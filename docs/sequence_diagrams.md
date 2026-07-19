@@ -10,7 +10,7 @@ sequenceDiagram
     participant T as 登録ツール(CLI/GUI)
     participant DB as PostgreSQL
     participant ST as ストレージ(BOX/S3)
-    participant SB as センサーBOX
+    participant SB as センサー
 
     Note over R,DB: --- 計測開始前: セッション登録 ---
     R->>T: セッション登録を開始
