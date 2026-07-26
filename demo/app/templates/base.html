@@ -2,33 +2,51 @@
 <html lang="ja">
 <head>
 <meta charset="utf-8">
-<title>実験条件デモ</title>
+<title>実験データ管理 POC</title>
 <script src="https://unpkg.com/htmx.org@1.9.12"></script>
 <style>
-  body { font-family: -apple-system, "Hiragino Kaku Gothic ProN", sans-serif; margin: 2rem auto; max-width: 900px; color: #222; }
-  nav { margin-bottom: 1.5rem; }
+  body { font-family: -apple-system, "Hiragino Kaku Gothic ProN", sans-serif; margin: 1.5rem auto;
+         max-width: 1000px; color: #222; line-height: 1.6; }
+  h1 { font-size: 1.4rem; border-bottom: 2px solid #0b5fff; padding-bottom: 0.3rem; }
+  h2 { font-size: 1.1rem; margin-top: 1.8rem; }
+  nav { margin-bottom: 1.5rem; padding-bottom: 0.5rem; border-bottom: 1px solid #ddd; }
   nav a { margin-right: 1rem; text-decoration: none; color: #0b5fff; font-weight: bold; }
-  nav a.active { color: #222; text-decoration: underline; }
-  table { border-collapse: collapse; width: 100%; margin-top: 1rem; }
-  th, td { border: 1px solid #ccc; padding: 0.5rem; text-align: left; vertical-align: top; }
+  table { border-collapse: collapse; width: 100%; margin-top: 0.6rem; font-size: 0.9rem; }
+  th, td { border: 1px solid #ccc; padding: 0.4rem 0.5rem; text-align: left; vertical-align: top; }
   th { background: #f4f4f4; }
   fieldset { border: 1px solid #ddd; margin-bottom: 1rem; padding: 0.75rem 1rem; }
   legend { font-weight: bold; padding: 0 0.3rem; }
   label { display: block; margin: 0.4rem 0 0.15rem; font-size: 0.9rem; color: #444; }
   input, select { padding: 0.3rem; }
   select[multiple] { min-height: 4.5rem; }
-  button { padding: 0.4rem 1rem; margin-top: 0.75rem; cursor: pointer; }
+  button { padding: 0.4rem 1rem; margin-top: 0.6rem; cursor: pointer; }
   .hint { color: #888; font-size: 0.8rem; }
   .error { color: #b00020; background: #fdecea; border: 1px solid #f5c2c0; padding: 0.6rem; margin-top: 0.75rem; }
   .success { color: #14532d; background: #e8f5e9; border: 1px solid #b6e0bb; padding: 0.6rem; margin-top: 0.75rem; }
-  .cond-tag { display: inline-block; background: #eef2ff; border-radius: 0.8rem; padding: 0.1rem 0.6rem; margin: 0.1rem; font-size: 0.85rem; }
+  .cond-tag { display: inline-block; background: #eef2ff; border-radius: 0.8rem;
+              padding: 0.1rem 0.6rem; margin: 0.1rem; font-size: 0.85rem; }
+  .effects { background: #fffbe6; border: 1px solid #f0e0a0; padding: 0.5rem 0.8rem; margin: 0.8rem 0; }
+  .effects summary { cursor: pointer; font-weight: bold; color: #7a5c00; }
+  .delta-plus { color: #14532d; font-weight: bold; }
+  .role-estimation { background: #e8f0ff; }
+  .role-ground_truth { background: #fff2e8; }
+  .role-evaluation { background: #f3e8ff; }
+  .pending-ok { color: #14532d; }
+  .pending-todo { color: #b45309; font-weight: bold; }
+  .actor-worker { color: #6b21a8; }
+  code, pre { font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: 0.82rem; }
+  pre { background: #f7f7f7; border: 1px solid #ddd; padding: 0.5rem; overflow-x: auto; }
+  .muted { color: #777; }
+  .group-head td { background: #eee; font-weight: bold; }
 </style>
 </head>
 <body>
 <nav>
-  <a href="/segments">閲覧</a>
-  <a href="/segments/new">登録</a>
+  <a href="/">ダッシュボード</a>
+  <a href="/sessions">計測セッション</a>
+  <a href="/segments">区間</a>
   <a href="/segments/search">検索</a>
+  <a href="/operations">操作履歴</a>
 </nav>
 {% block content %}{% endblock %}
 </body>

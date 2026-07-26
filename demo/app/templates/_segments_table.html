@@ -4,20 +4,19 @@
     <tr>
       <th>ID</th>
       <th>ラベル</th>
-      <th>計測日</th>
+      <th>セッション</th>
       <th>時間帯</th>
       <th>実験条件</th>
       <th>担当者</th>
-      <th>登録日時</th>
     </tr>
   </thead>
   <tbody>
     {% for seg in segments %}
     <tr>
-      <td>{{ seg.segment_id }}</td>
+      <td><a href="/segments/{{ seg.segment_id }}">{{ seg.segment_id }}</a></td>
       <td>{{ seg.label or "" }}</td>
-      <td>{{ seg.record_date }}</td>
-      <td>{{ seg.started_at or "" }}{% if seg.ended_at %} 〜 {{ seg.ended_at }}{% endif %}</td>
+      <td><a href="/sessions/{{ seg.session_id }}">{{ seg.record_date }} / 第{{ seg.session_no }}回</a></td>
+      <td class="muted"><code>{{ seg.started_at }}<br>〜 {{ seg.ended_at }}</code></td>
       <td>
         {% for name, value in seg.condition_display %}
           <span class="cond-tag">{{ name }}: {{ value }}</span>
@@ -26,7 +25,6 @@
         {% endfor %}
       </td>
       <td>{{ seg.creator_id }}</td>
-      <td>{{ seg.created_at }}</td>
     </tr>
     {% endfor %}
   </tbody>

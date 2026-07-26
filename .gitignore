@@ -13,5 +13,6 @@ wheels/
 # Virtual environments
 .venv
 
-# demo (SQLite + FastAPI local demo) runtime DB
+# demo (SQLite + FastAPI POC) runtime DB / ダミーS3の実体
 demo/data/*.db
+demo/data/storage/

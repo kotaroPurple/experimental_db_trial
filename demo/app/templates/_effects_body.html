@@ -1,0 +1,26 @@
+{# 事前予告の中身だけ。<details> の枠は呼び出し側が用意する。変数: effects #}
+{% if effects %}
+  {% if effects.storage %}
+    <p style="margin:0.4rem 0 0.2rem;"><strong>ストレージ (ダミーS3)</strong></p>
+    <ul style="margin:0;">
+      {% for path in effects.storage %}<li><code>{{ path }}</code></li>{% endfor %}
+    </ul>
+  {% endif %}
+
+  <p style="margin:0.6rem 0 0.2rem;"><strong>データベース</strong></p>
+  <table>
+    <thead><tr><th>テーブル</th><th>操作</th><th>行数</th><th>更新される項目</th></tr></thead>
+    <tbody>
+      {% for t in effects.tables %}
+      <tr>
+        <td><code>{{ t.table }}</code></td>
+        <td>{{ t.action }}</td>
+        <td>{{ t.rows }}</td>
+        <td>{{ t.columns }}</td>
+      </tr>
+      {% endfor %}
+    </tbody>
+  </table>
+
+  {% if effects.note %}<p class="hint" style="margin:0.4rem 0 0;">{{ effects.note }}</p>{% endif %}
+{% endif %}

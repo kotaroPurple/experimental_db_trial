@@ -1,0 +1,56 @@
+{% extends "base.html" %}
+{% block content %}
+<h1>操作履歴</h1>
+<p class="hint">
+  人の操作もワーカーの操作も同じログに残る。<strong>どこまでが人で、どこからが自動か</strong>が
+  この一覧で追える(docs/automation-plan.md §1 の人/機械の切り分け)。失敗した操作も記録される。
+</p>
+
+{% if operations %}
+{% for op in operations %}
+<details {% if loop.first %}open{% endif %}
+         style="border:1px solid #ddd; padding:0.5rem 0.8rem; margin-bottom:0.4rem;
+                {% if op.status == 'error' %}background:#fdecea;{% endif %}">
+  <summary>
+    <span class="muted">{{ op.occurred_at }}</span>
+    <strong class="{{ 'actor-worker' if op.actor == 'ワーカー' }}">[{{ op.actor }}]</strong>
+    <code>{{ op.operation }}</code> — {{ op.summary }}
+  </summary>
+
+  {% if op.detail.changes %}
+  <table>
+    <thead><tr><th>テーブル</th><th>操作</th><th>件数</th><th>主キー</th><th>内容</th></tr></thead>
+    <tbody>
+      {% for c in op.detail.changes %}
+      <tr>
+        <td>{{ c.label }} <code class="muted">{{ c.table }}</code></td>
+        <td>{{ c.action }}</td>
+        <td>{{ c.count }}</td>
+        <td><code>{{ c.row_ids | join(', ') }}</code></td>
+        <td>
+          {% for k, v in c.detail.items() %}<div><code>{{ k }}</code> = {{ v }}</div>{% endfor %}
+        </td>
+      </tr>
+      {% endfor %}
+    </tbody>
+  </table>
+  {% else %}
+    <p class="hint">DBへの書き込みはありません。</p>
+  {% endif %}
+
+  {% if op.detail.files %}
+    <p style="margin:0.5rem 0 0.2rem;"><strong>ストレージに置かれたファイル</strong></p>
+    <ul style="margin:0;">
+      {% for uri in op.detail.files %}
+      <li><code>{{ uri }}</code>
+        <a href="/preview?uri={{ uri | urlencode }}">見る</a>
+      </li>
+      {% endfor %}
+    </ul>
+  {% endif %}
+</details>
+{% endfor %}
+{% else %}
+<p class="hint">まだ操作がありません。</p>
+{% endif %}
+{% endblock %}

@@ -1,0 +1,98 @@
+{% extends "base.html" %}
+{% block content %}
+<h1>セッション {{ session.session_id }}
+  <span class="muted" style="font-size:0.9rem;">
+    {{ session.record_date }} / {{ session.recorder_id }} / 第{{ session.session_no }}回
+  </span>
+</h1>
+
+<p>
+  セットアップ:
+  {% for k, v in session.setup.items() %}<span class="cond-tag">{{ k }}: {{ v }}</span>
+  {% else %}<span class="muted">なし</span>{% endfor %}
+</p>
+<p>
+  計測時刻範囲(生ファイルから導出):
+  {% if time_range[0] %}<code>{{ time_range[0] }} 〜 {{ time_range[1] }}</code>
+  {% else %}<span class="muted">生ファイル未登録</span>{% endif %}
+</p>
+
+<h2>生データの投入</h2>
+{% include "_effects.html" %}
+
+<fieldset>
+  <legend>ダミー生データを生成する(POCの主経路)</legend>
+  <form hx-post="/sessions/{{ session.session_id }}/generate-raw" hx-target="#result" hx-swap="innerHTML">
+    <label>センサー種別(複数選択可)</label>
+    <select name="sensors" multiple size="{{ sensor_types | length }}">
+      {% for st in sensor_types %}
+        <option value="{{ st.sensor_type }}" selected>
+          {{ st.display_name }} ({{ st.sensor_type }} / {{ st.role }})
+        </option>
+      {% endfor %}
+    </select>
+
+    <label for="duration_minutes">計測時間(分)</label>
+    <input type="number" id="duration_minutes" name="duration_minutes" value="60" min="1" max="240">
+
+    <p class="hint">
+      センサーごとに20分ぶんで1ファイルに分割される(DD-05の「1センサーでも複数CSV」を再現)。
+      時刻はCSVの中身から抽出されるため、手入力欄はない。
+    </p>
+    <button type="submit">ダミー生データを生成して登録する</button>
+  </form>
+</fieldset>
+
+<fieldset>
+  <legend>実ファイルをアップロードする</legend>
+  <form hx-post="/sessions/{{ session.session_id }}/upload" hx-target="#result" hx-swap="innerHTML"
+        hx-encoding="multipart/form-data">
+    <label for="sensor_type">センサー種別</label>
+    <select id="sensor_type" name="sensor_type">
+      {% for st in sensor_types %}
+        <option value="{{ st.sensor_type }}">{{ st.display_name }} ({{ st.sensor_type }})</option>
+      {% endfor %}
+    </select>
+
+    <label for="file">CSVファイル(1列目が timestamp)</label>
+    <input type="file" id="file" name="file" accept=".csv">
+    <button type="submit">アップロードして登録する</button>
+  </form>
+</fieldset>
+
+<div id="result"></div>
+
+<h2>生データファイル({{ raw_files | length }} 件)</h2>
+{% if raw_files %}
+<table>
+  <thead>
+    <tr><th>raw_id</th><th>センサー</th><th>seq</th><th>started_at</th><th>ended_at</th><th>URI</th><th></th></tr>
+  </thead>
+  <tbody>
+    {% for r in raw_files %}
+    <tr>
+      <td>{{ r.raw_id }}</td>
+      <td>{{ r.sensor_type }}</td>
+      <td>{{ r.seq_no }}</td>
+      <td><code>{{ r.started_at }}</code></td>
+      <td><code>{{ r.ended_at }}</code></td>
+      <td><code class="muted">{{ r.file_uri }}</code></td>
+      <td style="white-space:nowrap;">
+        <a href="/preview?uri={{ r.file_uri | urlencode }}">見る</a>
+        <a href="/download?uri={{ r.file_uri | urlencode }}">DL</a>
+      </td>
+    </tr>
+    {% endfor %}
+  </tbody>
+</table>
+{% else %}
+<p class="hint">まだ生ファイルがありません。</p>
+{% endif %}
+
+<h2>このセッションの区間({{ segments | length }} 件)</h2>
+{% if segments %}
+{% include "_segments_table.html" %}
+{% else %}
+<p class="hint">まだ区間がありません。<a href="/segments/new">区間を切り出す</a></p>
+{% endif %}
+{% endblock %}

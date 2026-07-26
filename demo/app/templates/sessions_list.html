@@ -1,0 +1,39 @@
+{% extends "base.html" %}
+{% block content %}
+<h1>計測セッション</h1>
+<p class="hint">
+  一日の連続した記録行為そのもの。実験条件は付かず、センサー配置などのセットアップ情報だけを持つ(DD-02)。
+</p>
+<p><a href="/sessions/new">新しいセッションを登録する</a></p>
+
+{% if sessions %}
+<table>
+  <thead>
+    <tr>
+      <th>ID</th><th>計測日</th><th>担当者</th><th>第n回</th>
+      <th>セットアップ</th><th>生ファイル</th><th>区間</th><th>計測時刻範囲</th>
+    </tr>
+  </thead>
+  <tbody>
+    {% for s in sessions %}
+    <tr>
+      <td><a href="/sessions/{{ s.session_id }}">{{ s.session_id }}</a></td>
+      <td>{{ s.record_date }}</td>
+      <td>{{ s.recorder_id }}</td>
+      <td>{{ s.session_no }}</td>
+      <td>
+        {% for k, v in s.setup.items() %}<span class="cond-tag">{{ k }}: {{ v }}</span>{% endfor %}
+      </td>
+      <td>{{ s.raw_count }}</td>
+      <td>{{ s.segment_count }}</td>
+      <td class="muted">
+        {% if s.time_range[0] %}{{ s.time_range[0] }} 〜 {{ s.time_range[1] }}{% else %}—{% endif %}
+      </td>
+    </tr>
+    {% endfor %}
+  </tbody>
+</table>
+{% else %}
+<p class="hint">まだセッションがありません。</p>
+{% endif %}
+{% endblock %}

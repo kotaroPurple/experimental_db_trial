@@ -1,0 +1,74 @@
+{# 事後の差分表示: 実行前後のテーブル行数の変化と、実際に書き込まれた行を出す。 #}
+{% if error %}
+  <div class="error">
+    <strong>実行できませんでした</strong><br>{{ error }}
+    <div class="hint" style="margin-top:0.3rem;">
+      この失敗も operation_log に記録されています(<a href="/operations">操作履歴</a>)。
+    </div>
+  </div>
+{% else %}
+  <div class="success"><strong>実行しました。</strong>DBとストレージの変化は以下のとおりです。</div>
+
+  <h2>DBの変化(実行前 → 実行後)</h2>
+  {% if diff %}
+  <table>
+    <thead><tr><th>テーブル</th><th>実行前</th><th>実行後</th><th>増減</th></tr></thead>
+    <tbody>
+      {% for d in diff %}
+      <tr>
+        <td>{{ d.label }} <code class="muted">{{ d.table }}</code></td>
+        <td>{{ d.before }}</td>
+        <td>{{ d.after }}</td>
+        <td class="delta-plus">{% if d.delta > 0 %}+{% endif %}{{ d.delta }}</td>
+      </tr>
+      {% endfor %}
+    </tbody>
+  </table>
+  {% else %}
+    <p class="hint">行数の変化はありませんでした。</p>
+  {% endif %}
+
+  {% if changeset and changeset.changes %}
+  <h2>実際に書き込まれた行</h2>
+  <table>
+    <thead><tr><th>テーブル</th><th>操作</th><th>件数</th><th>主キー</th><th>内容</th></tr></thead>
+    <tbody>
+      {% for c in changeset.changes %}
+      <tr>
+        <td>{{ c.label }} <code class="muted">{{ c.table }}</code></td>
+        <td>{{ c.action }}</td>
+        <td>{{ c.count }}</td>
+        <td><code>{{ c.row_ids | join(', ') }}</code></td>
+        <td>
+          {% for k, v in c.detail.items() %}
+            <div><code>{{ k }}</code> = {{ v }}</div>
+          {% endfor %}
+        </td>
+      </tr>
+      {% endfor %}
+    </tbody>
+  </table>
+  {% endif %}
+
+  {% if changeset and changeset.files %}
+  <h2>ストレージに置かれたファイル</h2>
+  <table>
+    <thead><tr><th>URI</th><th></th></tr></thead>
+    <tbody>
+      {% for uri in changeset.files %}
+      <tr>
+        <td><code>{{ uri }}</code></td>
+        <td>
+          <a href="/preview?uri={{ uri | urlencode }}">中身を見る</a> /
+          <a href="/download?uri={{ uri | urlencode }}">ダウンロード</a>
+        </td>
+      </tr>
+      {% endfor %}
+    </tbody>
+  </table>
+  {% endif %}
+
+  <p style="margin-top:0.8rem;">
+    <a href="/">ダッシュボードで残作業を見る</a>
+  </p>
+{% endif %}

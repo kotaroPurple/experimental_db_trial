@@ -1,6 +1,12 @@
 {% extends "base.html" %}
 {% block content %}
-<h1>実験条件の閲覧</h1>
+<h1>切り出し区間</h1>
+<p class="hint">
+  実験条件が付く単位。<strong>人の判断が本質的に必要な唯一の工程</strong>で、ここから先(整形・処理・評価)は
+  自動化できる(DD-02 / DD-13)。
+</p>
+<p><a href="/segments/new">区間を切り出して条件を付ける</a></p>
+
 <div id="segments-table-container">
   {% include "_segments_table.html" %}
 </div>

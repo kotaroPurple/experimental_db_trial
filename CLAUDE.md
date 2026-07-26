@@ -4,15 +4,29 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## Project status
 
-This repository is currently **design-only**: it contains a database schema, ER diagram, sequence diagrams, and a
-design-decision log for an experimental sensor-data management system. There is no application code yet
-(`pyproject.toml` has no dependencies, `README.md` is empty). When asked to implement functionality, treat
-`docs/` as the spec to build against, and follow the phased approach described in DD-13/DD-14 below rather than
-building everything at once.
+The repository has two parts:
 
-- Python `3.12` (see `.python-version`), package metadata in `pyproject.toml`, no dependencies declared yet.
-- No build, lint, or test commands exist yet — there is nothing to run. Once code is added, this file should be
-  updated with the actual commands.
+1. **`docs/` — the design** for a PostgreSQL-backed experimental sensor-data management system. This is the
+   spec; treat it as the source of truth. Nothing in `docs/` has been deployed — no real Postgres instance
+   exists yet.
+2. **`demo/` — a local POC** (SQLite + FastAPI + htmx) that walks the *entire* lifecycle with dummy data,
+   a dummy S3 (local folder), and a dummy EC2 worker. It exists to show stakeholders what the system will feel
+   like, and deliberately diverges from the real design in documented ways (see `demo/README.md`).
+
+When asked to implement functionality, build against `docs/` and follow the phased approach in DD-13/DD-14.
+When changing `demo/`, keep its README's "本設計との違い" list accurate — that list is what stops the POC from
+being mistaken for the real implementation.
+
+- Python `3.12` (see `.python-version`), managed with `uv`. Dependencies: `fastapi`, `uvicorn[standard]`,
+  `jinja2`, `python-multipart`.
+- There is **no test suite and no linter configured**. Verification is manual (see `demo/README.md`).
+
+```bash
+uv run python demo/scripts/seed_db.py --reset                 # masters only; entity tables start empty
+uv run python demo/scripts/seed_db.py --reset --with-sample   # full scenario through to evaluation
+uv run uvicorn demo.app.main:app --reload --port 8000         # GUI at http://127.0.0.1:8000/
+uv run python demo/scripts/worker.py --once                   # one reconciliation pass
+```
 
 ## What this system is
 
@@ -23,16 +37,20 @@ in external storage (BOX/S3); the DB stores only URIs and metadata.
 
 ## Documentation map
 
-- `docs/design-decisions.md` (DD-01..DD-18) — the **why**. Read this before proposing schema changes; it
+- `docs/design-decisions.md` (DD-01..DD-19) — the **why**. Read this before proposing schema changes; it
   records rejected alternatives and the reasoning, so a change should only be made if the recorded reasoning no
   longer holds.
 - `docs/er.md` — the **what** (entity-relationship diagram, mermaid).
 - `docs/experiment_db_ddl_v2.sql` — the authoritative, runnable schema (tables, constraints, triggers).
+- `docs/tables.md` — per-table reference: what each table records and how tables connect (FK + trigger
+  constraints), with summary tables.
 - `docs/sequence_diagrams.md` — the **workflows** (4 scenarios: session/raw-file registration, segment
   cutting + formatting, algorithm run + evaluation, master-data addition/review).
+- `docs/automation-plan.md` — the **rollout plan**: which work is human vs. machine, named bottlenecks
+  (B1..B7), infrastructure choices, and a phased automation sequence.
 
-These four files must stay mutually consistent — a schema change implies updating `er.md`, the DDL, and
-(if it affects reasoning) `design-decisions.md`.
+A schema change implies updating `er.md`, the DDL, `tables.md`, and (if it affects reasoning)
+`design-decisions.md` — and usually `demo/app/schema.sql` too.
 
 ## Core data model (see `docs/er.md` / DDL for full detail)
 
@@ -65,8 +83,10 @@ Key conventions to preserve when extending this schema:
 - **Conditions are jsonb, controlled by a master vocabulary** (`condition_keys` / `condition_values`), not free
   text and not a fixed schema (DD-07, DD-08). `condition_keys.scope` (`session`/`segment`/`both`) determines
   which jsonb column (`recording_sessions.setup` vs `segments.conditions`) a key is valid for — there is one
-  shared master, not two. `value_type` (`enum`/`enum_array`/`number`/`text`/`boolean`) drives validation; the
-  variable-cardinality-subject case (0, 1, or 2+ subjects) uses `enum_array`, not a junction table (DD-15).
+  shared master, not two. `value_type` (`enum`/`enum_array`/`number`/`number_array`/`text`/`boolean`) drives
+  validation; the variable-cardinality-subject case (0, 1, or 2+ subjects) uses `enum_array`, not a junction
+  table (DD-15), and multi-axis numeric values (e.g. an x,y position) use `number_array` with per-axis metadata
+  in `condition_key_axes` (DD-19).
 - **Master edits are additive + reviewed, never destructive**: new values are inserted immediately
   (`is_active=true`) with only a similarity check; deactivation is logical (`is_active=false`); wording
   duplicates are consolidated via `merged_into` pointing at the canonical value, never by deleting/rewriting

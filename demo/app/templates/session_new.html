@@ -1,0 +1,43 @@
+{% extends "base.html" %}
+{% block content %}
+<h1>計測セッションの登録</h1>
+
+{% include "_effects.html" %}
+
+<form hx-post="/sessions" hx-target="#result" hx-swap="innerHTML">
+  <fieldset>
+    <legend>基本情報</legend>
+    <label for="record_date">計測日 *</label>
+    <input type="date" id="record_date" name="record_date" required>
+
+    <label for="recorder_id">計測担当者 *</label>
+    <input type="text" id="recorder_id" name="recorder_id" value="demo_user" required>
+
+    <p class="hint">
+      第n回(session_no)は「同一日・同一担当者」で自動採番されるため入力しない(DD-12の業務キー)。
+    </p>
+  </fieldset>
+
+  <fieldset>
+    <legend>セットアップ(scope=session/both のマスタ項目のみ)</legend>
+    {% for k in setup_keys %}
+      {% if k.value_type == "number" %}
+        <label for="{{ k.key_name }}">{{ k.display_name }}
+          {% if k.min_value is not none %}<span class="hint">({{ k.min_value }}〜{{ k.max_value }})</span>{% endif %}
+        </label>
+        <input type="number" step="any" id="{{ k.key_name }}" name="{{ k.key_name }}"
+               {% if k.min_value is not none %}min="{{ k.min_value }}"{% endif %}
+               {% if k.max_value is not none %}max="{{ k.max_value }}"{% endif %}>
+      {% else %}
+        <p class="hint">{{ k.display_name }}(<code>{{ k.value_type }}</code>)はこのPOCの登録画面では未対応。</p>
+      {% endif %}
+    {% else %}
+      <p class="hint">scope=session/both の条件キーが登録されていません。</p>
+    {% endfor %}
+  </fieldset>
+
+  <button type="submit">セッションを登録する</button>
+</form>
+
+<div id="result"></div>
+{% endblock %}

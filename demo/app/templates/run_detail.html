@@ -1,0 +1,85 @@
+{% extends "base.html" %}
+{% block content %}
+<h1>アルゴリズム試行 {{ run.run_id }}
+  <span class="muted" style="font-size:0.9rem;">{{ run.algorithm_display_name }} ({{ run.role }})</span>
+</h1>
+
+<table>
+  <tbody>
+    <tr><th>run_id</th><td>{{ run.run_id }}</td></tr>
+    <tr><th>区間</th><td><a href="/segments/{{ run.segment_id }}">segment_id={{ run.segment_id }}</a>
+        <span class="hint">(DD-06: 意図的な非正規化)</span></td></tr>
+    <tr><th>アルゴリズム</th><td><code>{{ run.algorithm_name }}</code> / role={{ run.role }}</td></tr>
+    <tr><th>実行者・試行番号</th><td>{{ run.runner_id }} / 第{{ run.run_no }}回</td></tr>
+    <tr><th>algo_conditions</th><td><pre>{{ run.algo_conditions | tojson(indent=2) }}</pre></td></tr>
+    <tr><th>出力</th>
+        <td>
+          {% if run.output_uri %}
+            <code class="muted">{{ run.output_uri }}</code><br>
+            <a href="/preview?uri={{ run.output_uri | urlencode }}">中身を見る</a> /
+            <a href="/download?uri={{ run.output_uri | urlencode }}">ダウンロード</a>
+          {% else %}<span class="muted">なし</span>{% endif %}
+        </td></tr>
+  </tbody>
+</table>
+
+<h2>入力: 整形データ(run_inputs)</h2>
+{% if inputs %}
+<table>
+  <thead><tr><th>formatted_id</th><th>センサー</th><th>URI</th><th></th></tr></thead>
+  <tbody>
+    {% for i in inputs %}
+    <tr>
+      <td>{{ i.formatted_id }}</td>
+      <td>{{ i.sensor_type }}</td>
+      <td><code class="muted">{{ i.data_uri }}</code></td>
+      <td><a href="/preview?uri={{ i.data_uri | urlencode }}">見る</a></td>
+    </tr>
+    {% endfor %}
+  </tbody>
+</table>
+{% else %}
+<p class="hint">整形データを直接の入力にはしていません。</p>
+{% endif %}
+
+<h2>入力: 他のrun(run_input_runs)</h2>
+<p class="hint">
+  評価runは推定run・真値runの出力を入力にとる。この依存関係が処理の系譜(DAG)を作る(DD-18)。
+</p>
+{% if input_runs %}
+<table>
+  <thead><tr><th>input_run_id</th><th>役割</th><th>アルゴリズム</th><th>出力</th></tr></thead>
+  <tbody>
+    {% for i in input_runs %}
+    <tr class="role-{{ i.role }}">
+      <td><a href="/runs/{{ i.input_run_id }}">{{ i.input_run_id }}</a></td>
+      <td>{{ i.role }}</td>
+      <td>{{ i.display_name }}</td>
+      <td>
+        {% if i.output_uri %}<a href="/preview?uri={{ i.output_uri | urlencode }}">見る</a>{% endif %}
+      </td>
+    </tr>
+    {% endfor %}
+  </tbody>
+</table>
+{% else %}
+<p class="hint">他のrunには依存していません。</p>
+{% endif %}
+
+<h2>評価指標(run_metrics)</h2>
+<p class="hint">
+  スカラー指標だけをDBに置き、誤差時系列などの非スカラー成果物はストレージ側に置く(DD-18)。
+</p>
+{% if metrics %}
+<table>
+  <thead><tr><th>metric_name</th><th>value</th></tr></thead>
+  <tbody>
+    {% for m in metrics %}
+    <tr><td><code>{{ m.metric_name }}</code></td><td>{{ "%.4f"|format(m.value) }}</td></tr>
+    {% endfor %}
+  </tbody>
+</table>
+{% else %}
+<p class="hint">このrunには指標がありません(推定run・真値runは指標を持たない)。</p>
+{% endif %}
+{% endblock %}

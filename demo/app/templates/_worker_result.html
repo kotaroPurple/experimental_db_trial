@@ -1,0 +1,30 @@
+{% if result.stage is none %}
+  <div class="success">残作業はありません(何もしませんでした)。
+    <span class="hint">同じ状態で何度実行しても変化しない = 冪等。</span>
+  </div>
+{% else %}
+  <div class="success">
+    <strong>[{{ result.stage }}]</strong> 完了 {{ result.done }} 件 / 失敗 {{ result.errors | length }} 件
+  </div>
+  {% for err in result.errors %}
+    <div class="error">{{ err }}</div>
+  {% endfor %}
+
+  {% if diff %}
+  <table>
+    <thead><tr><th>テーブル</th><th>実行前</th><th>実行後</th><th>増減</th></tr></thead>
+    <tbody>
+      {% for d in diff %}
+      <tr>
+        <td>{{ d.label }} <code class="muted">{{ d.table }}</code></td>
+        <td>{{ d.before }}</td><td>{{ d.after }}</td>
+        <td class="delta-plus">{% if d.delta > 0 %}+{% endif %}{{ d.delta }}</td>
+      </tr>
+      {% endfor %}
+    </tbody>
+  </table>
+  {% endif %}
+{% endif %}
+
+{# 実行後にダッシュボード本体を自動で更新する #}
+<div hx-get="/dashboard/panel" hx-trigger="load" hx-target="#dashboard-panel" hx-swap="innerHTML"></div>

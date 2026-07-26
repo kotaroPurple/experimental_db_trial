@@ -1,0 +1,7 @@
+{# 事前予告: この操作で何が更新されるかを実行前に示す。定義は pipeline.OPERATION_EFFECTS。 #}
+{% if effects %}
+<details class="effects" open>
+  <summary>この操作で更新されるもの — {{ effects.title }}</summary>
+  {% include "_effects_body.html" %}
+</details>
+{% endif %}

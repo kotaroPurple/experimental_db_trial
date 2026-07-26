@@ -1,0 +1,25 @@
+{% extends "base.html" %}
+{% block content %}
+<h1>実験データ管理 POC</h1>
+<p class="hint">
+  計測セッション登録 → 生データ投入 → 区間の切り出しと条件付与 → 整形 → 推定・真値 → 評価 までを
+  ダミーデータで一通り動かすPOC。<strong>人がやる工程は「区間の切り出しと条件付与」まで</strong>で、
+  そこから先はワーカー(差分検出ループ)が自動で進める。
+</p>
+
+<fieldset>
+  <legend>自動化ワーカー(ダミーEC2)</legend>
+  <p class="hint" style="margin:0;">
+    1回押すごとに、進行可能な段を1つだけ処理する(整形 → 実行 → 評価)。
+    CLI の <code>uv run python demo/scripts/worker.py --once</code> と同じ関数を呼んでいる。
+  </p>
+  <button hx-post="/worker/run-once" hx-target="#worker-result" hx-swap="innerHTML">
+    ワーカーを1回実行する
+  </button>
+  <div id="worker-result"></div>
+</fieldset>
+
+<div id="dashboard-panel">
+  {% include "_dashboard_panel.html" %}
+</div>
+{% endblock %}

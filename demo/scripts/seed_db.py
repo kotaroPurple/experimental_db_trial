@@ -1,23 +1,28 @@
-"""SQLiteデモDBの初期化・シード投入スクリプト。
+"""SQLite POC DBの初期化・マスタ投入スクリプト。
 
 使い方:
-    uv run python demo/scripts/seed_db.py           # 既存DBに未投入分だけ追加
-    uv run python demo/scripts/seed_db.py --reset   # DBファイルを作り直してから投入
+    uv run python demo/scripts/seed_db.py                  # 既存DBに未投入のマスタだけ追加
+    uv run python demo/scripts/seed_db.py --reset          # DBとストレージを作り直してマスタ投入
+    uv run python demo/scripts/seed_db.py --reset --with-sample
+        # さらにサンプルシナリオ(セッション→生データ→区間→整形→処理→評価)を一括で流す
+
+既定では実体テーブル(セッション・生ファイル・区間…)は空のまま始まる。
+GUI から操作するたびにテーブルが埋まっていく様子を見せるのがこのPOCの目的のため。
 """
 
 import argparse
 import json
+import shutil
 import sys
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[2]))
 
-from demo.app import db
-from demo.app.seed_data import CONDITION_KEYS, SAMPLE_SEGMENTS
+from demo.app import db, oplog, storage
+from demo.app.seed_data import ALGORITHMS, CONDITION_KEYS, SENSOR_TYPES
 
 
-def seed(conn):
-    key_id_by_name = {}
+def seed_masters(conn):
     for key in CONDITION_KEYS:
         conn.execute(
             """
@@ -38,7 +43,6 @@ def seed(conn):
         row = conn.execute(
             "SELECT key_id FROM condition_keys WHERE key_name = ?", (key["key_name"],)
         ).fetchone()
-        key_id_by_name[key["key_name"]] = row["key_id"]
 
         for raw_value, display_name in key["values"]:
             conn.execute(
@@ -58,55 +62,61 @@ def seed(conn):
                 (row["key_id"], axis_index, axis_label, min_v, max_v),
             )
 
-    existing = conn.execute("SELECT COUNT(*) AS n FROM segments").fetchone()["n"]
-    if existing == 0:
-        for seg in SAMPLE_SEGMENTS:
-            conn.execute(
-                """
-                INSERT INTO segments (label, record_date, started_at, ended_at, conditions, creator_id)
-                VALUES (?, ?, ?, ?, ?, ?)
-                """,
-                (
-                    seg["label"],
-                    seg["record_date"],
-                    seg["started_at"],
-                    seg["ended_at"],
-                    json.dumps(seg["conditions"], ensure_ascii=False),
-                    seg["creator_id"],
-                ),
-            )
+    for sensor_type, display_name, role in SENSOR_TYPES:
+        conn.execute(
+            """
+            INSERT OR IGNORE INTO sensor_types (sensor_type, display_name, role, is_active)
+            VALUES (?, ?, ?, 1)
+            """,
+            (sensor_type, display_name, role),
+        )
+
+    for algorithm_name, display_name, role, input_sensor_type in ALGORITHMS:
+        conn.execute(
+            """
+            INSERT OR IGNORE INTO algorithms
+                (algorithm_name, display_name, role, input_sensor_type, is_active)
+            VALUES (?, ?, ?, ?, 1)
+            """,
+            (algorithm_name, display_name, role, input_sensor_type),
+        )
 
     conn.commit()
 
-    counts = {
-        "condition_keys": conn.execute("SELECT COUNT(*) AS n FROM condition_keys").fetchone()["n"],
-        "condition_values": conn.execute("SELECT COUNT(*) AS n FROM condition_values").fetchone()["n"],
-        "condition_key_axes": conn.execute("SELECT COUNT(*) AS n FROM condition_key_axes").fetchone()["n"],
-        "segments": conn.execute("SELECT COUNT(*) AS n FROM segments").fetchone()["n"],
-    }
-    return counts
-
 
 def main():
-    parser = argparse.ArgumentParser(description="デモ用SQLite DBの初期化・シード投入")
-    parser.add_argument("--reset", action="store_true", help="既存のDBファイルを削除してから作り直す")
+    parser = argparse.ArgumentParser(description="POC用SQLite DBの初期化・マスタ投入")
+    parser.add_argument("--reset", action="store_true",
+                        help="既存のDBファイルとダミーストレージを削除してから作り直す")
+    parser.add_argument("--with-sample", action="store_true",
+                        help="マスタ投入後にサンプルシナリオを流し、評価まで到達した状態にする")
     args = parser.parse_args()
 
-    if args.reset and db.DB_PATH.exists():
-        db.DB_PATH.unlink()
-        print(f"既存DBを削除しました: {db.DB_PATH}")
+    if args.reset:
+        if db.DB_PATH.exists():
+            db.DB_PATH.unlink()
+            print(f"既存DBを削除しました: {db.DB_PATH}")
+        if storage.STORAGE_ROOT.exists():
+            shutil.rmtree(storage.STORAGE_ROOT)
+            print(f"既存ストレージを削除しました: {storage.STORAGE_ROOT}")
 
     db.DB_PATH.parent.mkdir(parents=True, exist_ok=True)
     conn = db.get_connection()
     try:
         db.init_db(conn)
-        counts = seed(conn)
+        seed_masters(conn)
+
+        if args.with_sample:
+            from demo.scripts.sample_scenario import run_sample_scenario
+            run_sample_scenario(conn)
+
+        counts = oplog.table_counts(conn)
     finally:
         conn.close()
 
     print(f"DB: {db.DB_PATH}")
-    print(f"condition_keys={counts['condition_keys']} condition_values={counts['condition_values']} "
-          f"condition_key_axes={counts['condition_key_axes']} segments={counts['segments']}")
+    for name, label, group in oplog.TABLES:
+        print(f"  {group:6s} {label:20s} {name:20s} {counts[name]:5d}")
 
 
 if __name__ == "__main__":

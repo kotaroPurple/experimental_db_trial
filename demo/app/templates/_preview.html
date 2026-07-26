@@ -1,0 +1,10 @@
+{% extends "base.html" %}
+{% block content %}
+<h1>ファイルの中身</h1>
+<p><code>{{ uri }}</code></p>
+<p class="hint">全 {{ total }} 行のうち先頭 {{ shown }} 行を表示。
+  <a href="/download?uri={{ uri | urlencode }}">ダウンロード</a>
+</p>
+<pre>{% for line in head %}{{ line }}
+{% endfor %}</pre>
+{% endblock %}

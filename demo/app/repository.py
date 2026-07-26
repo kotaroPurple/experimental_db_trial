@@ -159,20 +159,20 @@ def _value_registered(conn: sqlite3.Connection, key_name: str, value: Any) -> bo
 def create_segment(
     conn: sqlite3.Connection,
     *,
+    session_id: int,
     label: str | None,
-    record_date: str,
-    started_at: str | None,
-    ended_at: str | None,
+    started_at: str,
+    ended_at: str,
     conditions: dict,
     creator_id: str,
 ) -> int:
     validate_conditions(conn, conditions, scope="segment")
     cur = conn.execute(
         """
-        INSERT INTO segments (label, record_date, started_at, ended_at, conditions, creator_id)
+        INSERT INTO segments (session_id, label, started_at, ended_at, conditions, creator_id)
         VALUES (?, ?, ?, ?, ?, ?)
         """,
-        (label, record_date, started_at, ended_at, json.dumps(conditions, ensure_ascii=False), creator_id),
+        (session_id, label, started_at, ended_at, json.dumps(conditions, ensure_ascii=False), creator_id),
     )
     conn.commit()
     return cur.lastrowid
@@ -215,12 +215,38 @@ def _row_to_segment(
     return seg
 
 
-def list_segments(conn: sqlite3.Connection) -> list[dict]:
-    rows = conn.execute("SELECT * FROM segments ORDER BY created_at DESC, segment_id DESC").fetchall()
+def list_segments(conn: sqlite3.Connection, session_id: int | None = None) -> list[dict]:
+    query = """
+        SELECT s.*, rs.record_date, rs.recorder_id, rs.session_no
+        FROM segments s
+        JOIN recording_sessions rs ON rs.session_id = s.session_id
+    """
+    params: list[Any] = []
+    if session_id is not None:
+        query += " WHERE s.session_id = ?"
+        params.append(session_id)
+    query += " ORDER BY s.segment_id DESC"
+
+    rows = conn.execute(query, params).fetchall()
     value_display = _value_display_index(conn)
     keys = _key_index(conn)
     axes_by_key = _axes_index(conn)
     return [_row_to_segment(row, value_display, keys, axes_by_key) for row in rows]
+
+
+def get_segment(conn: sqlite3.Connection, segment_id: int) -> dict | None:
+    row = conn.execute(
+        """
+        SELECT s.*, rs.record_date, rs.recorder_id, rs.session_no
+        FROM segments s
+        JOIN recording_sessions rs ON rs.session_id = s.session_id
+        WHERE s.segment_id = ?
+        """,
+        (segment_id,),
+    ).fetchone()
+    if row is None:
+        return None
+    return _row_to_segment(row, _value_display_index(conn), _key_index(conn), _axes_index(conn))
 
 
 def search_segments(conn: sqlite3.Connection, filters: dict) -> list[dict]:
@@ -296,3 +322,395 @@ def _matches(conditions: dict, keys: dict[str, dict], axes_by_key: dict[str, lis
                 return False
 
     return True
+
+
+# ---------------------------------------------------------------------------
+# マスタ: センサー種別 / アルゴリズム
+# ---------------------------------------------------------------------------
+
+def list_sensor_types(conn: sqlite3.Connection, active_only: bool = True) -> list[dict]:
+    query = "SELECT * FROM sensor_types"
+    if active_only:
+        query += " WHERE is_active = 1"
+    query += " ORDER BY role, sensor_type"
+    return [dict(r) for r in conn.execute(query).fetchall()]
+
+
+def list_algorithms(conn: sqlite3.Connection, role: str | None = None,
+                    active_only: bool = True) -> list[dict]:
+    query = "SELECT * FROM algorithms"
+    clauses, params = [], []
+    if active_only:
+        clauses.append("is_active = 1")
+    if role is not None:
+        clauses.append("role = ?")
+        params.append(role)
+    if clauses:
+        query += " WHERE " + " AND ".join(clauses)
+    query += " ORDER BY role, algorithm_name"
+    return [dict(r) for r in conn.execute(query, params).fetchall()]
+
+
+def get_algorithm(conn: sqlite3.Connection, algorithm_name: str) -> dict | None:
+    row = conn.execute(
+        "SELECT * FROM algorithms WHERE algorithm_name = ?", (algorithm_name,)
+    ).fetchone()
+    return dict(row) if row else None
+
+
+# ---------------------------------------------------------------------------
+# recording_sessions
+# ---------------------------------------------------------------------------
+
+def next_session_no(conn: sqlite3.Connection, record_date: str, recorder_id: str) -> int:
+    row = conn.execute(
+        "SELECT COALESCE(MAX(session_no) + 1, 0) AS n FROM recording_sessions"
+        " WHERE record_date = ? AND recorder_id = ?",
+        (record_date, recorder_id),
+    ).fetchone()
+    return row["n"]
+
+
+def create_session(conn: sqlite3.Connection, *, record_date: str, recorder_id: str,
+                   session_no: int, setup: dict) -> int:
+    validate_conditions(conn, setup, scope="session")
+    cur = conn.execute(
+        """
+        INSERT INTO recording_sessions (record_date, recorder_id, session_no, setup)
+        VALUES (?, ?, ?, ?)
+        """,
+        (record_date, recorder_id, session_no, json.dumps(setup, ensure_ascii=False)),
+    )
+    conn.commit()
+    return cur.lastrowid
+
+
+def _row_to_session(row: sqlite3.Row) -> dict:
+    s = dict(row)
+    s["setup"] = json.loads(s["setup"])
+    return s
+
+
+def list_sessions(conn: sqlite3.Connection) -> list[dict]:
+    rows = conn.execute(
+        "SELECT * FROM recording_sessions ORDER BY record_date DESC, session_no DESC"
+    ).fetchall()
+    return [_row_to_session(r) for r in rows]
+
+
+def get_session(conn: sqlite3.Connection, session_id: int) -> dict | None:
+    row = conn.execute(
+        "SELECT * FROM recording_sessions WHERE session_id = ?", (session_id,)
+    ).fetchone()
+    return _row_to_session(row) if row else None
+
+
+def session_time_range(conn: sqlite3.Connection, session_id: int) -> tuple[str | None, str | None]:
+    """そのセッションの生ファイルが覆う時刻範囲。区間の範囲チェックに使う。"""
+    row = conn.execute(
+        "SELECT MIN(started_at) AS s, MAX(ended_at) AS e FROM raw_files WHERE session_id = ?",
+        (session_id,),
+    ).fetchone()
+    return row["s"], row["e"]
+
+
+# ---------------------------------------------------------------------------
+# raw_files
+# ---------------------------------------------------------------------------
+
+def next_seq_no(conn: sqlite3.Connection, session_id: int, sensor_type: str) -> int:
+    row = conn.execute(
+        "SELECT COALESCE(MAX(seq_no) + 1, 0) AS n FROM raw_files"
+        " WHERE session_id = ? AND sensor_type = ?",
+        (session_id, sensor_type),
+    ).fetchone()
+    return row["n"]
+
+
+def create_raw_file(conn: sqlite3.Connection, *, session_id: int, sensor_type: str, seq_no: int,
+                    file_uri: str, started_at: str | None, ended_at: str | None) -> int:
+    cur = conn.execute(
+        """
+        INSERT INTO raw_files (session_id, sensor_type, seq_no, file_uri, started_at, ended_at)
+        VALUES (?, ?, ?, ?, ?, ?)
+        """,
+        (session_id, sensor_type, seq_no, file_uri, started_at, ended_at),
+    )
+    conn.commit()
+    return cur.lastrowid
+
+
+def list_raw_files(conn: sqlite3.Connection, session_id: int | None = None) -> list[dict]:
+    query = "SELECT * FROM raw_files"
+    params: list[Any] = []
+    if session_id is not None:
+        query += " WHERE session_id = ?"
+        params.append(session_id)
+    query += " ORDER BY sensor_type, seq_no"
+    return [dict(r) for r in conn.execute(query, params).fetchall()]
+
+
+def find_raw_files_overlapping(conn: sqlite3.Connection, session_id: int, sensor_type: str,
+                               started_at: str, ended_at: str) -> list[dict]:
+    """区間と時刻が重なる生ファイルを逆引きする (DD-05/DD-17)。
+
+    本設計では tstzrange(...) && tstzrange(...) にあたる部分。SQLiteには範囲型がないため、
+    ISO8601の書式を揃えたうえで文字列比較で重なりを判定している。
+    """
+    rows = conn.execute(
+        """
+        SELECT * FROM raw_files
+        WHERE session_id = ? AND sensor_type = ?
+          AND started_at < ? AND ended_at > ?
+        ORDER BY seq_no
+        """,
+        (session_id, sensor_type, ended_at, started_at),
+    ).fetchall()
+    return [dict(r) for r in rows]
+
+
+# ---------------------------------------------------------------------------
+# formatted_data
+# ---------------------------------------------------------------------------
+
+def create_formatted_data(conn: sqlite3.Connection, *, segment_id: int, sensor_type: str,
+                          data_uri: str, formatter_id: str) -> int:
+    cur = conn.execute(
+        """
+        INSERT INTO formatted_data (segment_id, sensor_type, data_uri, formatter_id)
+        VALUES (?, ?, ?, ?)
+        """,
+        (segment_id, sensor_type, data_uri, formatter_id),
+    )
+    conn.commit()
+    return cur.lastrowid
+
+
+def list_formatted_data(conn: sqlite3.Connection, segment_id: int | None = None) -> list[dict]:
+    query = "SELECT * FROM formatted_data"
+    params: list[Any] = []
+    if segment_id is not None:
+        query += " WHERE segment_id = ?"
+        params.append(segment_id)
+    query += " ORDER BY formatted_id"
+    return [dict(r) for r in conn.execute(query, params).fetchall()]
+
+
+def latest_formatted_for(conn: sqlite3.Connection, segment_id: int, sensor_type: str) -> dict | None:
+    """同一区間・同一センサーの再整形を許容しているため、最新版を created_at で選ぶ。"""
+    row = conn.execute(
+        """
+        SELECT * FROM formatted_data
+        WHERE segment_id = ? AND sensor_type = ?
+        ORDER BY created_at DESC, formatted_id DESC LIMIT 1
+        """,
+        (segment_id, sensor_type),
+    ).fetchone()
+    return dict(row) if row else None
+
+
+# ---------------------------------------------------------------------------
+# algorithm_runs とその関連
+# ---------------------------------------------------------------------------
+
+def next_run_no(conn: sqlite3.Connection, segment_id: int, algorithm_name: str, runner_id: str) -> int:
+    row = conn.execute(
+        "SELECT COALESCE(MAX(run_no) + 1, 0) AS n FROM algorithm_runs"
+        " WHERE segment_id = ? AND algorithm_name = ? AND runner_id = ?",
+        (segment_id, algorithm_name, runner_id),
+    ).fetchone()
+    return row["n"]
+
+
+def create_run(conn: sqlite3.Connection, *, segment_id: int, algorithm_name: str, runner_id: str,
+               run_no: int, algo_conditions: dict, output_uri: str | None) -> int:
+    cur = conn.execute(
+        """
+        INSERT INTO algorithm_runs
+            (segment_id, algorithm_name, runner_id, run_no, algo_conditions, output_uri)
+        VALUES (?, ?, ?, ?, ?, ?)
+        """,
+        (segment_id, algorithm_name, runner_id, run_no,
+         json.dumps(algo_conditions, ensure_ascii=False), output_uri),
+    )
+    conn.commit()
+    return cur.lastrowid
+
+
+def set_run_output_uri(conn: sqlite3.Connection, run_id: int, output_uri: str) -> None:
+    conn.execute("UPDATE algorithm_runs SET output_uri = ? WHERE run_id = ?", (output_uri, run_id))
+    conn.commit()
+
+
+def add_run_input(conn: sqlite3.Connection, run_id: int, formatted_id: int) -> None:
+    conn.execute(
+        "INSERT OR IGNORE INTO run_inputs (run_id, formatted_id) VALUES (?, ?)",
+        (run_id, formatted_id),
+    )
+    conn.commit()
+
+
+def add_run_input_run(conn: sqlite3.Connection, run_id: int, input_run_id: int) -> None:
+    conn.execute(
+        "INSERT OR IGNORE INTO run_input_runs (run_id, input_run_id) VALUES (?, ?)",
+        (run_id, input_run_id),
+    )
+    conn.commit()
+
+
+def add_run_metric(conn: sqlite3.Connection, run_id: int, metric_name: str, value: float) -> None:
+    conn.execute(
+        "INSERT OR REPLACE INTO run_metrics (run_id, metric_name, value) VALUES (?, ?, ?)",
+        (run_id, metric_name, value),
+    )
+    conn.commit()
+
+
+def _row_to_run(row: sqlite3.Row) -> dict:
+    r = dict(row)
+    r["algo_conditions"] = json.loads(r["algo_conditions"])
+    return r
+
+
+def list_runs(conn: sqlite3.Connection, segment_id: int | None = None) -> list[dict]:
+    query = """
+        SELECT ar.*, a.display_name AS algorithm_display_name, a.role
+        FROM algorithm_runs ar
+        JOIN algorithms a ON a.algorithm_name = ar.algorithm_name
+    """
+    params: list[Any] = []
+    if segment_id is not None:
+        query += " WHERE ar.segment_id = ?"
+        params.append(segment_id)
+    query += " ORDER BY ar.run_id"
+    return [_row_to_run(r) for r in conn.execute(query, params).fetchall()]
+
+
+def get_run(conn: sqlite3.Connection, run_id: int) -> dict | None:
+    row = conn.execute(
+        """
+        SELECT ar.*, a.display_name AS algorithm_display_name, a.role
+        FROM algorithm_runs ar
+        JOIN algorithms a ON a.algorithm_name = ar.algorithm_name
+        WHERE ar.run_id = ?
+        """,
+        (run_id,),
+    ).fetchone()
+    return _row_to_run(row) if row else None
+
+
+def list_run_inputs(conn: sqlite3.Connection, run_id: int) -> list[dict]:
+    rows = conn.execute(
+        """
+        SELECT ri.formatted_id, f.sensor_type, f.data_uri
+        FROM run_inputs ri
+        JOIN formatted_data f ON f.formatted_id = ri.formatted_id
+        WHERE ri.run_id = ?
+        ORDER BY ri.formatted_id
+        """,
+        (run_id,),
+    ).fetchall()
+    return [dict(r) for r in rows]
+
+
+def list_run_input_runs(conn: sqlite3.Connection, run_id: int) -> list[dict]:
+    rows = conn.execute(
+        """
+        SELECT rir.input_run_id, ar.algorithm_name, a.display_name, a.role, ar.output_uri
+        FROM run_input_runs rir
+        JOIN algorithm_runs ar ON ar.run_id = rir.input_run_id
+        JOIN algorithms a ON a.algorithm_name = ar.algorithm_name
+        WHERE rir.run_id = ?
+        ORDER BY rir.input_run_id
+        """,
+        (run_id,),
+    ).fetchall()
+    return [dict(r) for r in rows]
+
+
+def list_run_metrics(conn: sqlite3.Connection, run_id: int | None = None) -> list[dict]:
+    query = "SELECT * FROM run_metrics"
+    params: list[Any] = []
+    if run_id is not None:
+        query += " WHERE run_id = ?"
+        params.append(run_id)
+    query += " ORDER BY run_id, metric_name"
+    return [dict(r) for r in conn.execute(query, params).fetchall()]
+
+
+# ---------------------------------------------------------------------------
+# 差分検出 (DD-03: 存在=状態。LEFT JOIN ... IS NULL で「やるべきこと」を導出する)
+# ---------------------------------------------------------------------------
+
+def find_unformatted(conn: sqlite3.Connection) -> list[dict]:
+    """時刻の重なる生ファイルがあるのに整形データがない (区間 x センサー) の組。
+
+    全センサーとの直積ではなく、そのセッションに実際に生データがあるセンサーだけが対象になる。
+    """
+    rows = conn.execute(
+        """
+        SELECT DISTINCT s.segment_id, r.sensor_type
+        FROM segments s
+        JOIN raw_files r
+          ON r.session_id = s.session_id
+         AND r.started_at < s.ended_at
+         AND r.ended_at   > s.started_at
+        LEFT JOIN formatted_data f
+          ON f.segment_id = s.segment_id AND f.sensor_type = r.sensor_type
+        WHERE f.formatted_id IS NULL
+        ORDER BY s.segment_id, r.sensor_type
+        """
+    ).fetchall()
+    return [dict(r) for r in rows]
+
+
+def find_unprocessed(conn: sqlite3.Connection) -> list[dict]:
+    """入力の整形データが揃っているのに、そのアルゴリズムのrunがない (区間 x アルゴリズム) の組。"""
+    rows = conn.execute(
+        """
+        SELECT DISTINCT f.segment_id, a.algorithm_name, a.role
+        FROM algorithms a
+        JOIN formatted_data f ON f.sensor_type = a.input_sensor_type
+        LEFT JOIN algorithm_runs ar
+          ON ar.segment_id = f.segment_id AND ar.algorithm_name = a.algorithm_name
+        WHERE a.is_active = 1
+          AND a.role IN ('estimation','ground_truth')
+          AND ar.run_id IS NULL
+        ORDER BY f.segment_id, a.algorithm_name
+        """
+    ).fetchall()
+    return [dict(r) for r in rows]
+
+
+def find_unevaluated(conn: sqlite3.Connection) -> list[dict]:
+    """推定runと真値runが揃っていて、両方を入力に持つ評価runがまだない組 (DD-18)。"""
+    rows = conn.execute(
+        """
+        SELECT est.segment_id, est.run_id AS est_run_id, gt.run_id AS gt_run_id
+        FROM algorithm_runs est
+        JOIN algorithms a_est
+          ON a_est.algorithm_name = est.algorithm_name AND a_est.role = 'estimation'
+        JOIN algorithm_runs gt
+          ON gt.segment_id = est.segment_id
+        JOIN algorithms a_gt
+          ON a_gt.algorithm_name = gt.algorithm_name AND a_gt.role = 'ground_truth'
+        WHERE NOT EXISTS (
+            SELECT 1 FROM algorithm_runs ev
+            JOIN algorithms a_ev
+              ON a_ev.algorithm_name = ev.algorithm_name AND a_ev.role = 'evaluation'
+            JOIN run_input_runs ri1 ON ri1.run_id = ev.run_id AND ri1.input_run_id = est.run_id
+            JOIN run_input_runs ri2 ON ri2.run_id = ev.run_id AND ri2.input_run_id = gt.run_id
+        )
+        ORDER BY est.segment_id, est.run_id, gt.run_id
+        """
+    ).fetchall()
+    return [dict(r) for r in rows]
+
+
+def pending_summary(conn: sqlite3.Connection) -> dict:
+    """ダッシュボードの「残作業」表示用。"""
+    return {
+        "unformatted": find_unformatted(conn),
+        "unprocessed": find_unprocessed(conn),
+        "unevaluated": find_unevaluated(conn),
+    }

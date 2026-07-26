@@ -1,9 +1,13 @@
-"""デモ用のシードデータ。
+"""POC用のシードデータ。
 
 posture / subjects は docs/design-decisions.md (DD-08, DD-15) / docs/er.md の例をそのまま流用している。
 room_temperature / is_night / notes_free は number/boolean/text の value_type を実演するために
 このデモ用に追加したものであり、本設計docに登場する項目ではない。
 position は value_type='number_array'(DD-19)の実演で、本設計(condition_key_axes)と1:1で対応させている。
+
+seed_db.py は既定ではこのファイルのマスタのみを投入する。実体テーブル(セッション・生ファイル・区間…)は
+空のまま始まり、GUI から操作するたびに埋まっていく様子を見られるようにするため。
+--with-sample を付けると SAMPLE_SESSION / SAMPLE_SEGMENTS のシナリオが pipeline 経由で流し込まれる。
 """
 
 CONDITION_KEYS = [
@@ -88,44 +92,52 @@ CONDITION_KEYS = [
     },
 ]
 
+# DD-16: 真値デバイスもセンサーの一種。role で区別する。
+SENSOR_TYPES = [
+    ("radar", "レーダー", "target"),
+    ("psg_reference", "PSG(真値デバイス)", "reference"),
+]
+
+# DD-16/DD-18: 推定・真値変換・評価をすべて algorithm_runs の1レコードとして扱う。
+# input_sensor_type は「このアルゴリズムがどのセンサーの整形データを入力にとるか」を表すPOC用の補助情報で、
+# 自動化ワーカーが何を起動すべきかを決めるために使う。
+ALGORITHMS = [
+    ("hr_estimate", "心拍推定(レーダー)", "estimation", "radar"),
+    ("truth_hr_from_psg", "真値抽出(PSG)", "ground_truth", "psg_reference"),
+    ("hr_eval", "推定と真値の比較", "evaluation", None),
+]
+
+# --with-sample 用のシナリオ。時刻はセッション開始からの相対分で指定する。
+SAMPLE_SESSION = {
+    "record_date": "2026-07-10",
+    "recorder_id": "demo_user",
+    "setup": {"room_temperature": 22.5},
+    "duration_minutes": 60,
+    "sensors": ["radar", "psg_reference"],
+}
+
 SAMPLE_SEGMENTS = [
     {
-        "label": "デモ実験1",
-        "record_date": "2026-07-10",
-        "started_at": "2026-07-10T09:00:00",
-        "ended_at": "2026-07-10T09:30:00",
+        "label": "仰臥位トライアル",
+        "offset_minutes": 5,
+        "duration_minutes": 15,
         "conditions": {
             "posture": "supine",
             "subjects": ["S001"],
-            "room_temperature": 22.5,
             "position": [2.5, 1.0],
-        },
-        "creator_id": "demo_user",
-    },
-    {
-        "label": "デモ実験2",
-        "record_date": "2026-07-11",
-        "started_at": "2026-07-11T14:00:00",
-        "ended_at": "2026-07-11T14:45:00",
-        "conditions": {
-            "posture": "lateral",
-            "subjects": ["S001", "S002"],
-            "room_temperature": 24.0,
             "is_night": False,
         },
         "creator_id": "demo_user",
     },
     {
-        "label": "デモ実験3(夜間・無人)",
-        "record_date": "2026-07-12",
-        "started_at": "2026-07-12T23:00:00",
-        "ended_at": "2026-07-12T23:40:00",
+        "label": "側臥位トライアル",
+        "offset_minutes": 25,
+        "duration_minutes": 15,
         "conditions": {
-            "posture": "supine",
-            "subjects": [],
-            "room_temperature": 26.5,
-            "is_night": True,
-            "notes_free": "真値デバイスのみで実施",
+            "posture": "lateral",
+            "subjects": ["S001", "S002"],
+            "position": [1.0, 2.0],
+            "notes_free": "被験者2名で実施",
         },
         "creator_id": "demo_user",
     },

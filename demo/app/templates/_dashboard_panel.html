@@ -1,0 +1,78 @@
+{# ダッシュボード本体。ワーカー実行後に htmx で差し替えられる。 #}
+<h2>残作業(DD-03: 存在=状態 から導出)</h2>
+<p class="hint">
+  状態カラムは持たず、「行が存在しないこと」から未処理を機械的に導出している。
+  ワーカーはこの一覧をそのまま処理対象にする。
+</p>
+<table>
+  <thead><tr><th>段</th><th>残</th><th>内訳</th></tr></thead>
+  <tbody>
+    <tr>
+      <td>未整形(区間 × センサー)</td>
+      <td class="{{ 'pending-todo' if pending.unformatted else 'pending-ok' }}">
+        {{ pending.unformatted | length }} 件
+      </td>
+      <td>
+        {% for p in pending.unformatted %}
+          <span class="cond-tag">区間{{ p.segment_id }} / {{ p.sensor_type }}</span>
+        {% else %}<span class="muted">—</span>{% endfor %}
+      </td>
+    </tr>
+    <tr>
+      <td>未処理(区間 × アルゴリズム)</td>
+      <td class="{{ 'pending-todo' if pending.unprocessed else 'pending-ok' }}">
+        {{ pending.unprocessed | length }} 件
+      </td>
+      <td>
+        {% for p in pending.unprocessed %}
+          <span class="cond-tag">区間{{ p.segment_id }} / {{ p.algorithm_name }}</span>
+        {% else %}<span class="muted">—</span>{% endfor %}
+      </td>
+    </tr>
+    <tr>
+      <td>未評価(推定run × 真値run)</td>
+      <td class="{{ 'pending-todo' if pending.unevaluated else 'pending-ok' }}">
+        {{ pending.unevaluated | length }} 件
+      </td>
+      <td>
+        {% for p in pending.unevaluated %}
+          <span class="cond-tag">区間{{ p.segment_id }} / run{{ p.est_run_id }}×run{{ p.gt_run_id }}</span>
+        {% else %}<span class="muted">—</span>{% endfor %}
+      </td>
+    </tr>
+  </tbody>
+</table>
+
+<h2>テーブルの行数</h2>
+<table>
+  <thead><tr><th>区分</th><th>テーブル</th><th>物理名</th><th>行数</th></tr></thead>
+  <tbody>
+    {% for c in counts %}
+    <tr>
+      <td>{{ c.group }}</td>
+      <td>{{ c.label }}</td>
+      <td><code class="muted">{{ c.table }}</code></td>
+      <td>{{ c.count }}</td>
+    </tr>
+    {% endfor %}
+  </tbody>
+</table>
+
+<h2>直近の操作</h2>
+<table>
+  <thead><tr><th>日時</th><th>実行者</th><th>操作</th><th>内容</th></tr></thead>
+  <tbody>
+    {% for op in operations %}
+    <tr>
+      <td class="muted">{{ op.occurred_at }}</td>
+      <td class="{{ 'actor-worker' if op.actor == 'ワーカー' }}">{{ op.actor }}</td>
+      <td><code>{{ op.operation }}</code></td>
+      <td>{% if op.status == 'error' %}<span class="error" style="padding:0.1rem 0.3rem;">{{ op.summary }}</span>
+          {% else %}{{ op.summary }}{% endif %}</td>
+    </tr>
+    {% else %}
+    <tr><td colspan="4" class="muted">まだ操作がありません。</td></tr>
+    {% endfor %}
+  </tbody>
+</table>
+<p><a href="/operations">すべての操作履歴を見る</a></p>

@@ -1,0 +1,115 @@
+{% extends "base.html" %}
+{% block content %}
+<h1>区間 {{ segment.segment_id }}
+  <span class="muted" style="font-size:0.9rem;">{{ segment.label or "" }}</span>
+</h1>
+
+<p>
+  セッション: <a href="/sessions/{{ segment.session_id }}">#{{ segment.session_id }}
+  {{ segment.record_date }} / 第{{ segment.session_no }}回</a><br>
+  時間帯: <code>{{ segment.started_at }} 〜 {{ segment.ended_at }}</code><br>
+  切り出し担当者: {{ segment.creator_id }}
+</p>
+<p>
+  実験条件:
+  {% for name, value in segment.condition_display %}
+    <span class="cond-tag">{{ name }}: {{ value }}</span>
+  {% else %}<span class="muted">なし</span>{% endfor %}
+</p>
+<details>
+  <summary class="hint">conditions の生JSON</summary>
+  <pre>{{ segment.conditions | tojson(indent=2) }}</pre>
+</details>
+
+<h2>整形データ({{ formatted | length }} 件)</h2>
+<details class="effects">
+  <summary>整形を実行すると更新されるもの</summary>
+  {% with effects = format_effects %}{% include "_effects_body.html" %}{% endwith %}
+</details>
+
+<form hx-post="/segments/{{ segment.segment_id }}/format" hx-target="#result" hx-swap="innerHTML">
+  <label for="fmt_sensor">センサー種別</label>
+  <select id="fmt_sensor" name="sensor_type">
+    {% for st in sensor_types %}
+      <option value="{{ st.sensor_type }}">{{ st.display_name }} ({{ st.sensor_type }})</option>
+    {% endfor %}
+  </select>
+  <button type="submit">整形を実行する</button>
+</form>
+
+{% if formatted %}
+<table>
+  <thead><tr><th>formatted_id</th><th>センサー</th><th>URI</th><th>整形者</th><th>作成日時</th><th></th></tr></thead>
+  <tbody>
+    {% for f in formatted %}
+    <tr>
+      <td>{{ f.formatted_id }}</td>
+      <td>{{ f.sensor_type }}</td>
+      <td><code class="muted">{{ f.data_uri }}</code></td>
+      <td>{{ f.formatter_id }}</td>
+      <td class="muted">{{ f.created_at }}</td>
+      <td style="white-space:nowrap;">
+        <a href="/preview?uri={{ f.data_uri | urlencode }}">見る</a>
+        <a href="/download?uri={{ f.data_uri | urlencode }}">DL</a>
+      </td>
+    </tr>
+    {% endfor %}
+  </tbody>
+</table>
+{% else %}
+<p class="hint">まだ整形データがありません。</p>
+{% endif %}
+
+<h2>アルゴリズム試行({{ runs | length }} 件)</h2>
+<details class="effects">
+  <summary>アルゴリズムを実行すると更新されるもの</summary>
+  {% with effects = run_effects %}{% include "_effects_body.html" %}{% endwith %}
+</details>
+
+<form hx-post="/segments/{{ segment.segment_id }}/run" hx-target="#result" hx-swap="innerHTML">
+  <label for="algo">アルゴリズム</label>
+  <select id="algo" name="algorithm_name">
+    {% for a in algorithms %}
+      <option value="{{ a.algorithm_name }}">{{ a.display_name }} ({{ a.role }})</option>
+    {% endfor %}
+  </select>
+  <p class="hint">
+    真値変換も評価も、推定と同じ algorithm_runs の1行として記録される(DD-16 / DD-18)。
+    評価は推定runと真値runが揃っている必要がある。
+  </p>
+  <button type="submit">アルゴリズムを実行する</button>
+</form>
+
+{% if runs %}
+<table>
+  <thead>
+    <tr><th>run_id</th><th>役割</th><th>アルゴリズム</th><th>試行番号</th><th>指標</th><th>出力</th></tr>
+  </thead>
+  <tbody>
+    {% for r in runs %}
+    <tr class="role-{{ r.role }}">
+      <td><a href="/runs/{{ r.run_id }}">{{ r.run_id }}</a></td>
+      <td>{{ r.role }}</td>
+      <td>{{ r.algorithm_display_name }}</td>
+      <td>{{ r.run_no }}</td>
+      <td>
+        {% for m in r.metrics %}
+          <span class="cond-tag">{{ m.metric_name }}={{ "%.3f"|format(m.value) }}</span>
+        {% else %}<span class="muted">—</span>{% endfor %}
+      </td>
+      <td style="white-space:nowrap;">
+        {% if r.output_uri %}
+          <a href="/preview?uri={{ r.output_uri | urlencode }}">見る</a>
+          <a href="/download?uri={{ r.output_uri | urlencode }}">DL</a>
+        {% else %}<span class="muted">—</span>{% endif %}
+      </td>
+    </tr>
+    {% endfor %}
+  </tbody>
+</table>
+{% else %}
+<p class="hint">まだ試行がありません。</p>
+{% endif %}
+
+<div id="result"></div>
+{% endblock %}
